@@ -43,41 +43,32 @@ sigma22 = std(s22);
 % dLOD from IERS excitation functions corrected for AOHSl
 % The data is alpha with gamma = 1
 % Open the LOD file in ms.
-% filename = 'B:\TRAVAUX_RECHERCHE\Differential_IC_rotation\Chiz1976-2026_AOHSlcorr.txt';
-% startRow = 4;
-% formatSpec = '%9f%9f%10f%10f%10f%[^\n\r]';
-% fileID = fopen(filename,'r');
-% textscan(fileID, '%[^\n\r]', startRow(1)-1, 'WhiteSpace', '', 'ReturnOnError', false);
-% dataArray = textscan(fileID, formatSpec, 'Delimiter', '', 'WhiteSpace', '', 'TextType', 'string', 'EmptyValue', NaN, 'ReturnOnError', false, 'EndOfLine', '\r\n');
-% for block=2:length(startRow)
-%     frewind(fileID);
-%     textscan(fileID, '%[^\n\r]', startRow(block)-1, 'WhiteSpace', '', 'ReturnOnError', false);
-%     dataArrayBlock = textscan(fileID, formatSpec, endRow(block)-startRow(block)+1, 'Delimiter', '', 'WhiteSpace', '', 'TextType', 'string', 'EmptyValue', NaN, 'ReturnOnError', false, 'EndOfLine', '\r\n');
-%     for col=1:length(dataArray)
-%         dataArray{col} = [dataArray{col};dataArrayBlock{col}];
-%     end
-% end
-% fclose(fileID);
-% Chiz19762026 = table(dataArray{1:end-1}, 'VariableNames', {'yrs','mjd','chix','chiy','chiz'});
-% % Conversion des années en dates MATLAB (pour faciliter les calculs de différences)
-% dateschi = decyr2datenum(Chiz19762026.yrs);
-% % filtering
+filename = 'B:\TRAVAUX_RECHERCHE\Differential_IC_rotation\Chiz1976-2026_AOHSlcorr.txt';
+startRow = 4;
+formatSpec = '%9f%9f%10f%10f%10f%[^\n\r]';
+fileID = fopen(filename,'r');
+textscan(fileID, '%[^\n\r]', startRow(1)-1, 'WhiteSpace', '', 'ReturnOnError', false);
+dataArray = textscan(fileID, formatSpec, 'Delimiter', '', 'WhiteSpace', '', 'TextType', 'string', 'EmptyValue', NaN, 'ReturnOnError', false, 'EndOfLine', '\r\n');
+for block=2:length(startRow)
+    frewind(fileID);
+    textscan(fileID, '%[^\n\r]', startRow(block)-1, 'WhiteSpace', '', 'ReturnOnError', false);
+    dataArrayBlock = textscan(fileID, formatSpec, endRow(block)-startRow(block)+1, 'Delimiter', '', 'WhiteSpace', '', 'TextType', 'string', 'EmptyValue', NaN, 'ReturnOnError', false, 'EndOfLine', '\r\n');
+    for col=1:length(dataArray)
+        dataArray{col} = [dataArray{col};dataArrayBlock{col}];
+    end
+end
+fclose(fileID);
+Chiz19762026 = table(dataArray{1:end-1}, 'VariableNames', {'yrs','mjd','chix','chiy','chiz'});
+% Conversion des années en dates MATLAB (pour faciliter les calculs de différences)
+dateschi = decyr2datenum(Chiz19762026.yrs);
+% filtering
 fs = 1/0.0027; % in cpy
 % Tfi = 3; % in years
 % norder = 3;
-% % LP filtering
-% [b,a] = butter(norder,1/Tfi/fs*2, 'low');
-% Chizfi = filtfilt(b,a,Chiz19762026.chiz);
-% % sigmaLOD = std(Chizfi)./1000/86400;
-%
-% LOD deconvolved from Core 
-% load('B:\TRAVAUX_RECHERCHE\ROTATION\LOD\Torques\LODdeconv-GGJx22.mat');
-% ATTENTION sampling rate different --> to be modified
-load('B:\TRAVAUX_RECHERCHE\ROTATION\LOD\Torques\LODdeconv-IGFx23.mat');
-%'newYears','LODres'
-% resample to fs = 1 month
-dateschi0 = decyr2datenum(newYears);
-[Chizfi,dateschi] = resample(LODres,dateschi0,fs);
+% LP filtering
+[b,a] = butter(norder,1/Tfi/fs*2, 'low');
+Chizfi = filtfilt(b,a,Chiz19762026.chiz);
+% sigmaLOD = std(Chizfi)./1000/86400;
 %
 % alpha angle
 alpha1 = -2*pi/86400^2*Cm*diff(Chizfi/1000)./diff(dateschi*86400);
