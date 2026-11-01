@@ -2,7 +2,7 @@ clear; clc; format long;
 %==========================================================================
 %               BAYESIAN INVERSION OF THE IC DIFFERENTIAL ROTATION
 %                                   S. Rosat
-%                     May 2026 - corrected version (oct. 2026)
+%                     Version: May 2026
 %                     + 1-sigma uncertainties on the MAP solution
 %==========================================================================
 % Parameters : dh (topo ICB), Gamma (gravitational coupling), tau (visco)
@@ -10,7 +10,7 @@ clear; clc; format long;
 % dh and Gamma are then non separable without independent a priori.
 %==========================================================================
 Cm    = 7.129e37;   % kg.m2
-icorr = 0;          % 1 : S22 corrected from ISBA hydrology
+icorr = 1;          % 1 : S22 corrected from ISBA hydrology
 sigma_n = [];       % standard deviation of SLR series (ierr = 0 only)
 ierr  = 2;          % data errors in the likelihood:
                     %   0 : constant sigma (sigma_n, or std(s22) if empty)
@@ -18,6 +18,9 @@ ierr  = 2;          % data errors in the likelihood:
                     %   2 : sigma_i = s*e_i, e_i give the relative weights and the
                     %       scale factor s is unknown and marginalized analytically
                     %       (Jeffreys prior 1/s) -> robust if errors are under/over-estimated
+fcorr = 1;          % Correction for residual correlation: Neff = fcorr*N
+                    % (1 = independent monthly data; e.g. ~1/3 if residuals
+                    % are correlated over ~3 months)
 
 %% S22 ---------------------------------------------------------------------
 cfile = 'cs22_ts_errors.nc';
@@ -45,16 +48,6 @@ t22 = nc_time(cfile,'time_monthly');  t22 = t22(:);
 ok  = ~isnan(s22_n);
 if ierr > 0, ok = ok & ~isnan(e22_n) & e22_n > 0; end
 s22 = s22_n(ok);  e22 = e22_n(ok);  t22 = t22(ok);
-%
-N   = numel(s22);
-if isempty(sigma_n), sigma = std(s22); else, sigma = sigma_n; end
-% weights w_i = 1/sigma_i^2 (relative weights only for ierr = 2)
-switch ierr
-    case 0, w = ones(N,1)/sigma^2;
-    case {1,2}, w = 1./e22.^2;
-    otherwise, error('ierr must be 0, 1 or 2');
-end
-fprintf('N = %d data, mean error = %.2e, std(S22) = %.2e\n', N, sqrt(mean(e22.^2)), std(s22));
 
 %% LOD (excitation chi_z corrected from AOHSl, in ms) ------------------------------
 filename = 'Chiz1976-2026_AOHSlcorr.txt';              
@@ -75,7 +68,26 @@ torque = -K*gradient(Lf, dt);                          % N.m
 
 A = interp1(tL, torque, t22);
 B = interp1(tL, KL,     t22);                        % N.m (to be divided by tau in years)
+
+% keep only the S22 epochs covered by the LOD series
+okL = ~isnan(A) & ~isnan(B);
+if any(~okL)
+    fprintf('%d S22 epochs outside the LOD time span removed\n', sum(~okL));
+end
+s22 = s22(okL);  e22 = e22(okL);  t22 = t22(okL);  A = A(okL);  B = B(okL);
+
 tyr = days(t22 - t22(1))/365.25;                       
+
+% [FIX 3] N, sigma and weights computed after the final data selection
+N   = numel(s22);
+if isempty(sigma_n), sigma = std(s22); else, sigma = sigma_n; end
+% weights w_i = 1/sigma_i^2 (relative weights only for ierr = 2)
+switch ierr
+    case 0, w = ones(N,1)/sigma^2;
+    case {1,2}, w = 1./e22.^2;
+    otherwise, error('ierr must be 0, 1 or 2');
+end
+fprintf('N = %d data, mean error = %.2e, std(S22) = %.2e\n', N, sqrt(mean(e22.^2)), std(s22));
 
 %% Parameter space -----------------------------------------------------
 nb = 100; nc = 100; nd = 100;
@@ -278,7 +290,8 @@ Om_ys  = @(t) ys.Oma*f_ys(t);                              % deg/yr
 phi_ys = @(t) -ys.Oma*ys.P/(2*pi)*(cos(2*pi*(t - ys.t1)/ys.P) - cos(2*pi*(ys.tz - ys.t1)/ys.P)); % deg
 fprintf('Yang & Song (2023), schematic: rate amplitude %.3f deg/yr, period %d yr\n', ys.Oma, ys.P);
 % comparison on Omega only (the angle phi_ys is defined up to an arbitrary offset)
-ys_omega = Om_ys(tyr);
+% Om_ys expects calendar (decimal) years
+ys_omega = Om_ys(decyear(t22));
 % Phi-angle from Yang&Song 2023
 temp = load("ICangle_from_seismology1995-2020_YangSong2023.txt");
 tsismo = datetime(datenum(temp(:,1),0,0),'ConvertFrom','datenum');
@@ -339,4 +352,10 @@ Lf = interp1(xg(:), Lp(:), xf, 'linear');
 ok = Lf >= max(Lf) - 0.5;
 lo = min(xf(ok));  hi = max(xf(ok));
 edge = ok(1) || ok(end);
+end
+
+function y = decyear(t)
+% [FIX 2] datetime -> decimal calendar year
+yr = year(t);
+y  = yr + (t - datetime(yr,1,1))./(datetime(yr+1,1,1) - datetime(yr,1,1));
 end
